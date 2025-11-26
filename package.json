@@ -1,6 +1,6 @@
 {
-  "name": "@librechat/agents",
-  "version": "3.0.32",
+  "name": "@aipyq/agents",
+  "version": "1.0.0",
   "main": "./dist/cjs/main.cjs",
   "module": "./dist/esm/main.mjs",
   "types": "./dist/types/index.d.ts",
@@ -12,15 +12,9 @@
     }
   },
   "type": "module",
-  "description": "",
-  "author": "Danny Avila",
+  "description": "AI agents framework",
+  "author": "aipyq",
   "license": "MIT",
-  "licenses": [
-    {
-      "type": "MIT",
-      "url": "https://github.com/danny-avila/agents/blob/main/LICENSE"
-    }
-  ],
   "packageManager": "npm@10.5.2",
   "engines": {
     "node": ">=14.0.0"

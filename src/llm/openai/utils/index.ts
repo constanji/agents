@@ -876,11 +876,8 @@ export function _convertOpenAIResponsesDeltaToBaseMessageChunk(
       : undefined;
 
     additional_kwargs.reasoning = {
-      // 我们只捕获第一个 chunk 的 ID，否则所有 chunk 的拼接结果将会有一个重复的 ID 字段。
-      // There is special handling for the `type`
-      // 我们只捕获第一个 chunk 的 ID，否则所有 chunk 的拼接结果将会有一个重复的 ID 字段。
-      // have an ID field that is repeated once per chunk. There is special handling for the `type`
-      // field that prevents this, however.
+      // 我们只在第一个块（chunk）中捕获 ID，否则所有块拼接后的结果中，
+      // ID 字段会每个块重复一次。不过，对于 `type` 字段我们有特殊处理来防止这种情况。
       id: chunk.item.id,
       type: chunk.item.type,
       ...(summary ? { summary } : {}),

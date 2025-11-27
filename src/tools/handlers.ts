@@ -21,6 +21,24 @@ import {
 import { formatResultsForLLM } from '@/tools/search/format';
 import { getMessageId } from '@/messages';
 
+/**
+ * Fixes duplicated tool call IDs that can occur when LangChain's concat function
+ * merges AIMessageChunks. The concat function may concatenate string fields like
+ * `id` together, resulting in IDs like "call_xxxcall_xxx" instead of "call_xxx".
+ */
+function deduplicateToolCallId(id: string | undefined): string | undefined {
+  if (!id || typeof id !== 'string') return id;
+  const len = id.length;
+  if (len % 2 !== 0) return id;
+  const half = len / 2;
+  const firstHalf = id.substring(0, half);
+  const secondHalf = id.substring(half);
+  if (firstHalf === secondHalf) {
+    return firstHalf;
+  }
+  return id;
+}
+
 export async function handleToolCallChunks({
   graph,
   stepKey,
@@ -65,6 +83,11 @@ export async function handleToolCallChunks({
   /** Also track first non-empty id/name by index for streaming providers like ModelScope */
   for (const toolCallChunk of toolCallChunks) {
     const index = toolCallChunk.index ?? 0;
+
+    // Fix duplicated IDs before processing
+    if (toolCallChunk.id) {
+      toolCallChunk.id = deduplicateToolCallId(toolCallChunk.id);
+    }
 
     // Store first non-empty id and name for this index
     if (
@@ -173,7 +196,9 @@ export const handleToolCalls = async (
   const stepKey = graph.getStepKey(metadata);
 
   for (const tool_call of toolCalls) {
-    const toolCallId = tool_call.id ?? `toolu_${nanoid()}`;
+    // Fix duplicated tool call IDs before processing
+    const rawId = tool_call.id ?? `toolu_${nanoid()}`;
+    const toolCallId = deduplicateToolCallId(rawId) ?? rawId;
     tool_call.id = toolCallId;
     if (!toolCallId || graph.toolCallStepIds.has(toolCallId)) {
       continue;

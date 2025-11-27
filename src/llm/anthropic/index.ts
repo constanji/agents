@@ -94,6 +94,10 @@ function cloneChunk(
   } else if (tokenType === 'input') {
     return chunk;
   }
+  // 添加 null 检查，防止 chunk.content 为空时报错
+  if (!Array.isArray(chunk.content) || chunk.content.length === 0) {
+    return chunk;
+  }
   const content = chunk.content[0] as MessageContentComplex;
   if (tokenType === 'content' && content.type === 'text') {
     return new AIMessageChunk(

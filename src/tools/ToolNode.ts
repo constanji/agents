@@ -22,6 +22,24 @@ import type * as t from '@/types';
 import { RunnableCallable } from '@/utils';
 
 /**
+ * Fixes duplicated tool call IDs that can occur when LangChain's concat function
+ * merges AIMessageChunks. The concat function may concatenate string fields like
+ * `id` together, resulting in IDs like "call_xxxcall_xxx" instead of "call_xxx".
+ */
+function deduplicateToolCallId(id: string | undefined): string | undefined {
+  if (!id || typeof id !== 'string') return id;
+  const len = id.length;
+  if (len % 2 !== 0) return id;
+  const half = len / 2;
+  const firstHalf = id.substring(0, half);
+  const secondHalf = id.substring(half);
+  if (firstHalf === secondHalf) {
+    return firstHalf;
+  }
+  return id;
+}
+
+/**
  * Helper to check if a value is a Send object
  */
 function isSend(value: unknown): value is Send {
@@ -82,7 +100,9 @@ export class ToolNode<T = any> extends RunnableCallable<T, T> {
       const turn = this.toolUsageCount.get(call.name) ?? 0;
       this.toolUsageCount.set(call.name, turn + 1);
       const args = call.args;
-      const stepId = this.toolCallStepIds?.get(call.id!);
+      // Fix duplicated tool call IDs before lookup
+      const fixedId = deduplicateToolCallId(call.id);
+      const stepId = this.toolCallStepIds?.get(fixedId!);
       const output = await tool.invoke(
         { ...call, args, type: 'tool_call', stepId, turn },
         config
@@ -125,7 +145,7 @@ export class ToolNode<T = any> extends RunnableCallable<T, T> {
             toolName: call.name,
             toolCallId: call.id,
             toolArgs: call.args,
-            stepId: this.toolCallStepIds?.get(call.id!),
+            stepId: this.toolCallStepIds?.get(fixedId!),
             turn: this.toolUsageCount.get(call.name),
             originalError: {
               message: e.message,

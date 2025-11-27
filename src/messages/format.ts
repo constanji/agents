@@ -289,6 +289,7 @@ function formatAssistantMessage(
 
   if (Array.isArray(message.content)) {
     for (const part of message.content) {
+      if (part == null) continue;
       if (part.type === ContentTypes.TEXT && part.tool_call_ids) {
         /*
         If there's pending content, it needs to be aggregated as a single string to prepare for tool calls.
@@ -425,6 +426,7 @@ function labelAllAgentContent(
       formattedParts.push(`--- ${agentName} ---`);
 
       for (const part of agentContentBuffer) {
+        if (part == null) continue;
         if (part.type === ContentTypes.THINK) {
           const thinkContent = (part as ReasoningContentText).think || '';
           if (thinkContent) {
@@ -533,6 +535,7 @@ export const labelContentByAgent = (
       formattedParts.push(`--- Transfer to ${agentName} ---`);
 
       for (const part of agentContentBuffer) {
+        if (part == null) continue;
         if (part.type === ContentTypes.THINK) {
           formattedParts.push(
             `${agentName}: ${JSON.stringify({
@@ -584,6 +587,7 @@ export const labelContentByAgent = (
 
   for (let i = 0; i < contentParts.length; i++) {
     const part = contentParts[i];
+    if (part == null) continue;
     const agentId = agentIdMap[i];
 
     // Check if this is a transfer tool call
@@ -680,6 +684,7 @@ export const formatAgentMessages = (
       const content = message.content;
       if (content && Array.isArray(content)) {
         for (const part of content) {
+          if (part == null) continue;
           if (part.type === ContentTypes.TOOL_CALL) {
             hasToolCalls = true;
             if (tools.size === 0) {
@@ -722,6 +727,7 @@ export const formatAgentMessages = (
           const content = payload[j].content;
           if (content != null && Array.isArray(content)) {
             for (const part of content) {
+              if (part == null) continue;
               if (part.type === ContentTypes.TOOL_CALL) {
                 isToolResponse = true;
                 break;

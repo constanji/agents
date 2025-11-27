@@ -62,7 +62,36 @@ export async function handleToolCallChunks({
       : undefined;
 
   /** Edge Case: `id` and `name` fields cannot be empty strings */
+  /** Also track first non-empty id/name by index for streaming providers like ModelScope */
   for (const toolCallChunk of toolCallChunks) {
+    const index = toolCallChunk.index ?? 0;
+
+    // Store first non-empty id and name for this index
+    if (
+      toolCallChunk.id &&
+      toolCallChunk.id !== '' &&
+      toolCallChunk.name &&
+      toolCallChunk.name !== ''
+    ) {
+      if (!graph.toolCallChunkIdsByIndex.has(index)) {
+        graph.toolCallChunkIdsByIndex.set(index, {
+          id: toolCallChunk.id,
+          name: toolCallChunk.name,
+        });
+      }
+    }
+
+    // Restore id and name from stored values if current chunk has empty values
+    const storedInfo = graph.toolCallChunkIdsByIndex.get(index);
+    if (storedInfo) {
+      if (!toolCallChunk.id || toolCallChunk.id === '') {
+        toolCallChunk.id = storedInfo.id;
+      }
+      if (!toolCallChunk.name || toolCallChunk.name === '') {
+        toolCallChunk.name = storedInfo.name;
+      }
+    }
+
     if (toolCallChunk.name === '') {
       toolCallChunk.name = undefined;
     }

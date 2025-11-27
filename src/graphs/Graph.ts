@@ -64,6 +64,24 @@ import { HandlerRegistry } from '@/events';
 
 const { AGENT, TOOLS } = GraphNodeKeys;
 
+/**
+ * Fixes duplicated tool call IDs that can occur when LangChain's concat function
+ * merges AIMessageChunks. The concat function may concatenate string fields like
+ * `id` together, resulting in IDs like "call_xxxcall_xxx" instead of "call_xxx".
+ */
+function deduplicateToolCallId(id: string | undefined): string | undefined {
+  if (!id || typeof id !== 'string') return id;
+  const len = id.length;
+  if (len % 2 !== 0) return id;
+  const half = len / 2;
+  const firstHalf = id.substring(0, half);
+  const secondHalf = id.substring(half);
+  if (firstHalf === secondHalf) {
+    return firstHalf;
+  }
+  return id;
+}
+
 export abstract class Graph<
   T extends t.BaseGraphState = t.BaseGraphState,
   _TNodeName extends string = string,
@@ -130,6 +148,9 @@ export abstract class Graph<
   stepKeyIds: Map<string, string[]> = new Map<string, string[]>();
   contentIndexMap: Map<string, number> = new Map();
   toolCallStepIds: Map<string, string> = new Map();
+  /** Map of tool call chunk index to its first non-empty id and name (for streaming providers like ModelScope) */
+  toolCallChunkIdsByIndex: Map<number, { id: string; name: string }> =
+    new Map();
   signal?: AbortSignal;
   /** Set of invoked tool call IDs from non-message run steps completed mid-run, if any */
   invokedToolIds?: Set<string>;
@@ -189,6 +210,10 @@ export class StandardGraph extends Graph<t.BaseGraphState, t.GraphNode> {
     }
     this.stepKeyIds = resetIfNotEmpty(this.stepKeyIds, new Map());
     this.toolCallStepIds = resetIfNotEmpty(this.toolCallStepIds, new Map());
+    this.toolCallChunkIdsByIndex = resetIfNotEmpty(
+      this.toolCallChunkIdsByIndex,
+      new Map()
+    );
     this.messageIdsByStepKey = resetIfNotEmpty(
       this.messageIdsByStepKey,
       new Map()
@@ -929,7 +954,10 @@ export class StandardGraph extends Graph<t.BaseGraphState, t.GraphNode> {
     const [stepId, stepIndex] = this.generateStepId(stepKey);
     if (stepDetails.type === StepTypes.TOOL_CALLS && stepDetails.tool_calls) {
       for (const tool_call of stepDetails.tool_calls) {
-        const toolCallId = tool_call.id ?? '';
+        // Fix duplicated tool call IDs before storing
+        const rawToolCallId = tool_call.id ?? '';
+        const toolCallId =
+          deduplicateToolCallId(rawToolCallId) ?? rawToolCallId;
         if (!toolCallId || this.toolCallStepIds.has(toolCallId)) {
           continue;
         }
@@ -993,7 +1021,8 @@ export class StandardGraph extends Graph<t.BaseGraphState, t.GraphNode> {
       return;
     }
     const output = _output as ToolMessage;
-    const { tool_call_id } = output;
+    const { tool_call_id: rawToolCallId } = output;
+    const tool_call_id = deduplicateToolCallId(rawToolCallId) ?? rawToolCallId;
     const stepId = this.toolCallStepIds.get(tool_call_id) ?? '';
     if (!stepId) {
       throw new Error(`No stepId found for tool_call_id ${tool_call_id}`);
@@ -1013,7 +1042,7 @@ export class StandardGraph extends Graph<t.BaseGraphState, t.GraphNode> {
     const tool_call = {
       args: typeof args === 'string' ? args : JSON.stringify(args),
       name: output.name ?? '',
-      id: output.tool_call_id,
+      id: tool_call_id,
       output: omitOutput === true ? '' : dispatchedOutput,
       progress: 1,
     };
@@ -1052,9 +1081,10 @@ export class StandardGraph extends Graph<t.BaseGraphState, t.GraphNode> {
       return;
     }
 
-    const stepId = graph.toolCallStepIds.get(data.id) ?? '';
+    const toolCallId = deduplicateToolCallId(data.id) ?? data.id;
+    const stepId = graph.toolCallStepIds.get(toolCallId) ?? '';
     if (!stepId) {
-      throw new Error(`No stepId found for tool_call_id ${data.id}`);
+      throw new Error(`No stepId found for tool_call_id ${toolCallId}`);
     }
 
     const { name, input: args, error } = data;
@@ -1065,7 +1095,7 @@ export class StandardGraph extends Graph<t.BaseGraphState, t.GraphNode> {
     }
 
     const tool_call: t.ProcessedToolCall = {
-      id: data.id,
+      id: toolCallId,
       name: name || '',
       args: typeof args === 'string' ? args : JSON.stringify(args),
       output: `Error processing tool${error?.message != null ? `: ${error.message}` : ''}`,

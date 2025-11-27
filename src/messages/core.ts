@@ -46,6 +46,32 @@ const allowedTypesByProvider: Record<string, string[]> = {
   [Providers.OPENAI]: _allowedTypes,
 };
 
+/**
+ * Fixes duplicated tool call IDs that can occur when LangChain's concat function
+ * merges AIMessageChunks. The concat function may concatenate string fields like
+ * `id` together, resulting in IDs like "call_xxxcall_xxx" instead of "call_xxx".
+ *
+ * @param id - The tool call ID to check and potentially fix
+ * @returns The deduplicated ID, or the original if no duplication was detected
+ */
+function deduplicateToolCallId(id: string | undefined): string | undefined {
+  if (!id || typeof id !== 'string') return id;
+
+  // Check if the ID is duplicated (e.g., "call_xxxcall_xxx")
+  const len = id.length;
+  if (len % 2 !== 0) return id;
+
+  const half = len / 2;
+  const firstHalf = id.substring(0, half);
+  const secondHalf = id.substring(half);
+
+  if (firstHalf === secondHalf) {
+    return firstHalf;
+  }
+
+  return id;
+}
+
 const modifyContent = ({
   provider,
   messageType,
@@ -80,7 +106,23 @@ const modifyContent = ({
         'input' in item &&
         item.input === ''
       ) {
-        return { ...item, type: newType, input: '{}' };
+        // Also fix duplicated ID in tool_use content
+        const fixedId =
+          'id' in item ? deduplicateToolCallId(item.id as string) : undefined;
+        return {
+          ...item,
+          type: newType,
+          input: '{}',
+          ...(fixedId !== undefined ? { id: fixedId } : {}),
+        };
+      }
+
+      // Fix duplicated ID in tool_use content
+      if (newType === 'tool_use' && 'id' in item) {
+        const fixedId = deduplicateToolCallId(item.id as string);
+        if (fixedId !== item.id) {
+          return { ...item, type: newType, id: fixedId };
+        }
       }
 
       return { ...item, type: newType };
@@ -135,6 +177,19 @@ function reduceBlocks(blocks: ContentBlock[]): ContentBlock[] {
   return reduced;
 }
 
+/**
+ * Fixes duplicated IDs in tool_calls array that can occur during chunk concatenation
+ */
+function fixToolCallIds(toolCalls: ToolCall[] | undefined): void {
+  if (!toolCalls || !Array.isArray(toolCalls)) return;
+
+  for (const toolCall of toolCalls) {
+    if (toolCall.id) {
+      toolCall.id = deduplicateToolCallId(toolCall.id);
+    }
+  }
+}
+
 export function modifyDeltaProperties(
   provider: Providers,
   obj?: AIMessageChunk
@@ -165,6 +220,13 @@ export function modifyDeltaProperties(
       content: obj.lc_kwargs.content,
     });
   }
+
+  // Fix duplicated tool call IDs that can occur during chunk concatenation
+  fixToolCallIds(obj.tool_calls);
+  if (obj.lc_kwargs.tool_calls) {
+    fixToolCallIds(obj.lc_kwargs.tool_calls);
+  }
+
   return obj;
 }
 

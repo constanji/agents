@@ -14,7 +14,7 @@ export const getCodeBaseURL = (): string =>
   getEnvironmentVariable(EnvVar.CODE_BASEURL) ??
   Constants.OFFICIAL_CODE_BASEURL;
 
-const imageMessage = 'Image is already displayed to the user';
+const imageMessage = 'Image is already displayed to the 用户';
 const otherMessage = 'File is already downloaded by the user';
 const accessMessage =
   'Note: Files are READ-ONLY. Save changes to NEW filenames. To access these files in future executions, provide the `session_id` as a parameter (not in your code).';
